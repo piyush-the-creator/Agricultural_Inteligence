@@ -23,7 +23,7 @@ export default function MobileNav() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#E2E0D8] z-30 flex justify-around items-center h-[60px] px-2 shadow-[0_-1px_3px_rgba(27,36,30,0.04)]"
+      className="md:hidden fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 bg-[var(--bg)]/92 backdrop-blur-md border-t border-[var(--line)] pb-[env(safe-area-inset-bottom,0)] shadow-xs"
       aria-label="Mobile Navigation"
     >
       {MOBILE_ITEMS.map((item) => {
@@ -32,14 +32,15 @@ export default function MobileNav() {
           <Link
             key={item.href}
             href={item.href}
-            className={`flex flex-col items-center justify-center flex-1 h-full min-h-[48px] py-1 transition-colors ${
+            aria-current={isActive ? "page" : undefined}
+            className={`flex flex-col items-center justify-center py-2.5 px-1 min-h-[56px] transition-colors ${
               isActive
-                ? "text-[#2D5A3C] font-semibold"
-                : "text-[#58635A] hover:text-[#1B241E]"
+                ? "text-[var(--leaf)] font-semibold"
+                : "text-[var(--muted)] hover:text-[var(--ink)]"
             }`}
           >
-            <Icon name={item.icon} className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] uppercase font-mono tracking-tight">
+            <Icon name={item.icon} className="w-4 h-4 mb-1" />
+            <span className="text-[0.78rem] tracking-tight font-body">
               {item.label}
             </span>
           </Link>

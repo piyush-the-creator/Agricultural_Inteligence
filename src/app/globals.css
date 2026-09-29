@@ -3,17 +3,101 @@
 @tailwind utilities;
 
 :root {
-  --color-canvas: #FBFBF9;
-  --color-slate: #1B241E;
-  --color-canopy: #2D5A3C;
-  --color-border: #E2E0D8;
+  --bg: #F3F5EE;
+  --surface: #FBFCF8;
+  --ink: #14201A;
+  --muted: #5A665D;
+  --line: #DCE1D3;
+  --leaf: #2E6B3F;
+  --leaf-soft: #E3EDDD;
+  --deep: #16311F;
+  --on-deep: #EAF2E4;
+  --stress: #C99A2E;
+  --radius: 10px;
+  --display: var(--font-display), "Bricolage Grotesque", system-ui, sans-serif;
+  --body: var(--font-body), "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --wrap: 1120px;
+
+  /* Legacy mappings */
+  --color-canvas: var(--bg);
+  --color-slate: var(--ink);
+  --color-canopy: var(--leaf);
+  --color-border: var(--line);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0E1611;
+    --surface: #142019;
+    --ink: #E9EFE4;
+    --muted: #97A498;
+    --line: #24332A;
+    --leaf: #7DBB86;
+    --leaf-soft: #1A2B20;
+    --deep: #1B3A26;
+    --on-deep: #EAF2E4;
+  }
 }
 
 body {
-  background-color: #FBFBF9;
-  color: #1B241E;
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.wrap {
+  width: min(var(--wrap), 100% - 48px);
+  margin-inline: auto;
+}
+
+.btn-tmpl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border-radius: 99px;
+  font-family: var(--body);
+  font-weight: 500;
+  font-size: 0.98rem;
+  text-decoration: none;
+  border: 1px solid var(--ink);
+  transition: background .15s, color .15s, border-color .15s;
+  cursor: pointer;
+}
+
+.btn-tmpl-primary {
+  background: var(--leaf);
+  border-color: var(--leaf);
+  color: #fff;
+}
+
+.btn-tmpl-primary:hover {
+  background: color-mix(in srgb, var(--leaf) 85%, #000);
+}
+
+.btn-tmpl-ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.btn-tmpl-ghost:hover {
+  border-color: var(--ink);
+}
+
+@keyframes pixel {
+  to {
+    opacity: 1;
+  }
 }
 
 /* Enforce tabular numerals on all telemetry figures */
@@ -23,8 +107,8 @@ body {
 
 /* Accessible focus ring */
 *:focus-visible {
-  outline: 2px solid #2D5A3C;
-  outline-offset: 2px;
+  outline: 2px solid var(--leaf);
+  outline-offset: 3px;
 }
 
 /* Hide Google Translate Banner and Reset Body Position */
