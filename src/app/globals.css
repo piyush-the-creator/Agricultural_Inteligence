@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-canvas: #FBFBF9;
+  --color-slate: #1B241E;
+  --color-canopy: #2D5A3C;
+  --color-border: #E2E0D8;
+}
+
+body {
+  background-color: #FBFBF9;
+  color: #1B241E;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Enforce tabular numerals on all telemetry figures */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accessible focus ring */
+*:focus-visible {
+  outline: 2px solid #2D5A3C;
+  outline-offset: 2px;
+}
