@@ -36,8 +36,8 @@ export default function Footer() {
             Terms of Service
           </Link>
           <span className="text-[#E2E0D8]">|</span>
-          <Link href="/network" className="hover:underline hover:text-[#1B241E]">
-            CADS Schema
+          <Link href="/network" className="hover:underline hover:text-[#1B241E] font-medium text-[#2D5A3C]">
+            Open Standards / CADS Protocol (DPG)
           </Link>
         </div>
       </div>

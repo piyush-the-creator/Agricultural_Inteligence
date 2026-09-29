@@ -11,7 +11,7 @@ export default function NetworkPage() {
   const [nodes, setNodes] = useState<NetworkNode[]>(BRICS_NODES);
   const [selectedNode, setSelectedNode] = useState<NetworkNode>(BRICS_NODES[0]);
   const [copied, setCopied] = useState(false);
-  const [activeView, setActiveView] = useState<"cads_json" | "telemetry_summary">("cads_json");
+  const [activeView, setActiveView] = useState<"cads_json" | "telemetry_summary">("telemetry_summary");
 
   useEffect(() => {
     fetch("/api/network/nodes")

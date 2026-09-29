@@ -16,7 +16,6 @@ const MOBILE_ITEMS: MobileNavItem[] = [
   { href: "/farm", label: "Farm", icon: "mapPin" },
   { href: "/regenerative", label: "Plan", icon: "leaf" },
   { href: "/disease", label: "Scan", icon: "flask" },
-  { href: "/network", label: "Network", icon: "satellite" },
 ];
 
 export default function MobileNav() {

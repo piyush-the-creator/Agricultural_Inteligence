@@ -9,7 +9,6 @@ const NAV_ITEMS = [
   { href: "/farm", label: "My Farm" },
   { href: "/regenerative", label: "Regenerative Plan" },
   { href: "/disease", label: "Disease Scanner" },
-  { href: "/network", label: "AgriN Network" },
 ];
 
 export default function Navbar() {
