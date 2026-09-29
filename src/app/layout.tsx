@@ -4,6 +4,8 @@ import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
 import MobileNav from "@/components/layout/MobileNav";
 import Footer from "@/components/layout/Footer";
+import { LanguageProvider } from "@/context/LanguageContext";
+import GoogleTranslateProvider from "@/components/layout/GoogleTranslateProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -40,14 +42,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen bg-[#FBFBF9] text-[#1B241E] flex flex-col justify-between selection:bg-[#EBF2ED] selection:text-[#1E5E2E]">
-        <Navbar />
-        <main className="flex-1 max-w-[1240px] w-full mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-8">
-          {children}
-        </main>
-        <MobileNav />
-        <Footer />
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+    >
+      <body
+        suppressHydrationWarning
+        className="min-h-screen bg-[#FBFBF9] text-[#1B241E] flex flex-col justify-between selection:bg-[#EBF2ED] selection:text-[#1E5E2E]"
+      >
+        <LanguageProvider>
+          <GoogleTranslateProvider />
+          <Navbar />
+          <main className="flex-1 max-w-[1240px] w-full mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-8">
+            {children}
+          </main>
+          <MobileNav />
+          <Footer />
+        </LanguageProvider>
       </body>
     </html>
   );

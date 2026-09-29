@@ -26,3 +26,47 @@ body {
   outline: 2px solid #2D5A3C;
   outline-offset: 2px;
 }
+
+/* Hide Google Translate Banner and Reset Body Position */
+.goog-te-banner-frame,
+.goog-te-banner-frame.skiptranslate,
+iframe.goog-te-banner-frame {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  border: none !important;
+}
+
+body {
+  top: 0px !important;
+  position: static !important;
+}
+
+.goog-te-gadget {
+  display: none !important;
+}
+
+#google_translate_element {
+  display: none !important;
+}
+
+.goog-tooltip,
+.goog-tooltip:hover {
+  display: none !important;
+}
+
+.goog-text-highlight {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+#goog-gt-tt {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+.skiptranslate > iframe {
+  display: none !important;
+}
+
