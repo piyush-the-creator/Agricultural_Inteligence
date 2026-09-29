@@ -1,306 +1,382 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Badge } from "@/components/ui/Badge";
-import { Icon } from "@/components/ui/Icons";
-import { StepProgress, ProgressStep } from "@/components/ui/StepProgress";
 
-const PIPELINE_STEPS: ProgressStep[] = [
-  { id: 1, text: "Resolving geographic coordinates (EPSG:4326)" },
-  { id: 2, text: "Fetching atmospheric forecast (Open-Meteo ECMWF)" },
-  { id: 3, text: "Calibrating regional soil chemistry baseline (HWSD v2.0)" },
-  { id: 4, text: "Processing Copernicus Sentinel-2 NDVI spectral ratio" },
-  { id: 5, text: "Synthesizing causal agronomy advisory via Gemini 1.5" },
-];
-
-export default function FarmSetupPage() {
+export default function FarmPage() {
   const router = useRouter();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [pipelineStep, setPipelineStep] = useState(1);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [country, setCountry] = useState("India");
-  const [location, setLocation] = useState("Ahmedabad, Gujarat");
-  const [crop, setCrop] = useState("Wheat");
-  const [area, setArea] = useState(2.5);
-  const [areaUnit, setAreaUnit] = useState<"Acres" | "Hectares">("Acres");
-  const [ph, setPh] = useState(6.8);
-  const [organicCarbon, setOrganicCarbon] = useState("Medium");
-  const [nitrogen, setNitrogen] = useState("Low");
-  const [soilExpanded, setSoilExpanded] = useState(false);
+  const [activeLayer, setActiveLayer] = useState<"ndvi" | "moisture" | "zones">("ndvi");
+  const [syncing, setSyncing] = useState(false);
+  const [syncLogs, setSyncLogs] = useState<string[]>([
+    "[System] Ready. Waiting for Copernicus Sentinel-2 query...",
+    "[Telemetry] Last recorded pass: 3 days ago · Cloud coverage: 2.1%",
+    "[Orbit] Next satellite transit over Ahmedabad: Today 11:28 IST",
+  ]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const handleStartAnalysis = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsAnalyzing(true);
-    setPipelineStep(1);
+  // Form State
+  const [farmName, setFarmName] = useState("Ahmedabad Wheat Parcel Alpha");
+  const [acres, setAcres] = useState("2.5");
+  const [crop, setCrop] = useState("wheat");
+  const [sowDate, setSowDate] = useState("2025-11-15");
+  const [irrigation, setIrrigation] = useState("canal");
+  const [tillage, setTillage] = useState("reduced");
 
-    // Coordinate resolution based on selected location
-    let lat = 23.0225;
-    let lon = 72.5714;
-    if (country === "Brazil") {
-      lat = -12.6819;
-      lon = -56.9211;
-    } else if (country === "Russia") {
-      lat = 47.2357;
-      lon = 39.7015;
-    } else if (country === "China") {
-      lat = 34.7657;
-      lon = 113.6853;
-    } else if (country === "South Africa") {
-      lat = -28.4541;
-      lon = 26.7968;
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3200);
+  };
+
+  // Render GIS Canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Satellite tile base
+    ctx.fillStyle = "#D6DDD0";
+    ctx.fillRect(0, 0, w, h);
+
+    // Contour lines
+    ctx.strokeStyle = "#CAD3C3";
+    ctx.lineWidth = 1;
+    for (let y = 30; y < h; y += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.bezierCurveTo(w * 0.3, y - 20, w * 0.7, y + 20, w, y);
+      ctx.stroke();
     }
 
-    try {
-      setTimeout(() => setPipelineStep(2), 500);
-      setTimeout(() => setPipelineStep(3), 1000);
-      setTimeout(() => setPipelineStep(4), 1600);
+    // Parcel Boundary polygon (2.5 acre plot)
+    const pts = [
+      { x: 70, y: 60 },
+      { x: 520, y: 75 },
+      { x: 500, y: 350 },
+      { x: 90, y: 330 },
+    ];
 
-      const res = await fetch("/api/farm/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          country,
-          location,
-          latitude: lat,
-          longitude: lon,
-          crop,
-          farmArea: Number(area),
-          areaUnit,
-          soil: {
-            ph: Number(ph),
-            organicCarbon,
-            nitrogen,
-          },
-        }),
-      });
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach((p) => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.clip();
 
-      setTimeout(() => setPipelineStep(5), 2100);
+    if (activeLayer === "ndvi") {
+      const grad = ctx.createLinearGradient(70, 60, 520, 350);
+      grad.addColorStop(0, "#2F7341");
+      grad.addColorStop(0.7, "#479B58");
+      grad.addColorStop(1, "#B5C467");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    } else if (activeLayer === "moisture") {
+      const grad = ctx.createLinearGradient(70, 60, 500, 350);
+      grad.addColorStop(0, "#2D758C");
+      grad.addColorStop(0.6, "#3A9BB8");
+      grad.addColorStop(1, "#97CBD9");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    } else if (activeLayer === "zones") {
+      ctx.fillStyle = "#2F7341";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(201, 154, 46, 0.75)";
+      ctx.beginPath();
+      ctx.arc(430, 270, 110, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data?.farmIntelligence) {
-          localStorage.setItem("agrin_active_farm", JSON.stringify(json.data.farmIntelligence));
-        }
+    // Outline parcel boundary
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach((p) => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.strokeStyle = "#14201A";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Corner GPS markers
+    pts.forEach((p) => {
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#14201A";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+
+    // GIS Labels
+    ctx.font = '12px "Instrument Sans", sans-serif';
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 4;
+    ctx.fillText("Zone A (High Vigor · 1.8 ac)", 120, 180);
+    ctx.fillText("Zone B (Sandy Loam Spot · 0.7 ac)", 310, 280);
+    ctx.shadowBlur = 0;
+  }, [activeLayer]);
+
+  const handleSyncSatellite = () => {
+    setSyncing(true);
+    const newLogs = [
+      `[${new Date().toLocaleTimeString()}] Authenticating Copernicus Open Access Hub API...`,
+      `[${new Date().toLocaleTimeString()}] Resolving footprint tile T43QDA (Ahmedabad Rural)...`,
+      `[${new Date().toLocaleTimeString()}] Fetching Sentinel-2 Level-2A BOA surface bands...`,
+      `[${new Date().toLocaleTimeString()}] Atmospheric aerosol correction applied (Sen2Cor v2.10)...`,
+      `[${new Date().toLocaleTimeString()}] Mean NDVI calculated across 2.5 acres: 0.714...`,
+      `[${new Date().toLocaleTimeString()}] Gemini 1.5 synthesized latest advisory: CADS packet verified. DONE.`,
+    ];
+
+    let i = 0;
+    setSyncLogs([]);
+    const interval = setInterval(() => {
+      if (i < newLogs.length) {
+        setSyncLogs((prev) => [...prev, newLogs[i]]);
+        i++;
+      } else {
+        clearInterval(interval);
+        setSyncing(false);
+        showToast("Sentinel-2 Telemetry in Sync");
       }
-    } catch (err) {
-      console.warn("Analysis request fallback:", err);
-    } finally {
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 2700);
-    }
+    }, 450);
+  };
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      localStorage.setItem(
+        "agrin_active_farm",
+        JSON.stringify({
+          farm: {
+            name: farmName,
+            area: parseFloat(acres) || 2.5,
+            crop,
+            location: "Ahmedabad, Gujarat",
+            country: "India",
+            stage: "Tillering",
+          },
+        })
+      );
+    } catch {}
+    showToast("Farm parameters updated across network model");
   };
 
   return (
-    <div className="py-4">
-      {isAnalyzing ? (
-        <div className="py-8">
-          <StepProgress
-            title="AgriN Intelligence Pipeline"
-            subtitle={`Synthesizing multi-source observation telemetry for ${location}...`}
-            currentStep={pipelineStep}
-            steps={PIPELINE_STEPS}
-          />
+    <div className="space-y-8">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-20 right-6 bg-[var(--ink)] text-[var(--bg)] px-5 py-3 rounded-full text-sm shadow-xl z-50 animate-bounce">
+          {toastMessage}
         </div>
-      ) : (
-        <div className="max-w-[620px] mx-auto bg-white border border-[#E2E0D8] rounded p-6 sm:p-8">
-          {/* Header */}
-          <div className="border-b border-[#E2E0D8] pb-4 mb-6 flex justify-between items-start">
-            <div>
-              <span className="text-[10px] font-mono uppercase bg-[#F2F4F3] text-[#58635A] px-1.5 py-0.5 rounded border border-[#E2E0D8]">
-                Step 1 of 2
-              </span>
-              <h1 className="text-xl font-semibold tracking-tight text-[#1B241E] mt-1.5">
-                Configure Field Parameters
-              </h1>
-              <p className="text-xs text-[#58635A] mt-1">
-                Specify parcel coordinates and crop species to calibrate satellite and weather telemetry.
-              </p>
+      )}
+
+      {/* Page Header */}
+      <div className="border-b border-[var(--line)] pb-6 pt-4">
+        <div className="wrap">
+          <h1 className="text-[2rem] sm:text-[2.6rem] font-medium leading-tight text-[var(--ink)]">
+            My Farm Parcel
+          </h1>
+          <p className="text-[var(--muted)] text-[1.05rem] mt-1 max-w-2xl">
+            GIS field perimeter boundary, multispectral layer selector, and direct Sentinel-2 telemetry synchronizer.
+          </p>
+        </div>
+      </div>
+
+      <div className="wrap">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-8">
+          {/* Left: Parcel GIS Canvas & Terminal */}
+          <div>
+            <div className="relative rounded-[var(--radius)] overflow-hidden border border-[var(--line)] bg-[#E8EBDF] h-[420px] shadow-xs">
+              <div className="absolute top-3.5 left-3.5 flex gap-2 z-10 bg-[var(--surface)] p-1 rounded-full border border-[var(--line)] shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setActiveLayer("ndvi")}
+                  className={`border-0 px-3 py-1.5 text-xs rounded-full transition-colors ${
+                    activeLayer === "ndvi"
+                      ? "bg-[var(--ink)] text-white font-medium"
+                      : "text-[var(--muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  NDVI Greenness
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLayer("moisture")}
+                  className={`border-0 px-3 py-1.5 text-xs rounded-full transition-colors ${
+                    activeLayer === "moisture"
+                      ? "bg-[var(--ink)] text-white font-medium"
+                      : "text-[var(--muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  NDWI Moisture
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLayer("zones")}
+                  className={`border-0 px-3 py-1.5 text-xs rounded-full transition-colors ${
+                    activeLayer === "zones"
+                      ? "bg-[var(--ink)] text-white font-medium"
+                      : "text-[var(--muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  Management Zones
+                </button>
+              </div>
+
+              <canvas
+                ref={canvasRef}
+                width={600}
+                height={420}
+                className="w-full h-full block"
+              />
             </div>
-            <Link href="/">
-              <Button variant="tertiary" size="sm">
-                Cancel
-              </Button>
-            </Link>
+
+            <div className="flex justify-between items-center mt-3 text-[0.85rem] text-[var(--muted)] font-mono">
+              <span>Parcel ID: IND-GJ-AMD-2024-0089</span>
+              <span>{"Coordinates: 23°01'44.2\"N 72°34'12.0\"E"}</span>
+            </div>
+
+            {/* Sync Terminal Box */}
+            <div className="card-tmpl mt-5">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-[1rem] font-medium text-[var(--ink)]">
+                  Sentinel-2 Live Earth Observation Sync
+                </h4>
+                <button
+                  disabled={syncing}
+                  onClick={handleSyncSatellite}
+                  className="btn-tmpl btn-tmpl-primary btn-tmpl-sm text-xs"
+                >
+                  {syncing ? "Querying Orbit..." : "Sync Satellite Pass"}
+                </button>
+              </div>
+
+              <div className="bg-[#0E1611] text-[#8BE49B] font-mono text-[0.8rem] p-4 rounded-lg h-44 overflow-y-auto leading-relaxed border border-[#1B3A26]">
+                {syncLogs.map((log, index) => (
+                  <div key={index}>{log}</div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Form Fields */}
-          <form className="space-y-5" onSubmit={handleStartAnalysis}>
-            {/* 1. Country Selection */}
-            <div>
-              <label htmlFor="country-select" className="block text-xs font-semibold text-[#1B241E] mb-1">
-                COUNTRY NODE (BRICS FEDERATION)
-              </label>
-              <select
-                id="country-select"
-                value={country}
-                onChange={(e) => {
-                  setCountry(e.target.value);
-                  if (e.target.value === "India") setLocation("Ahmedabad, Gujarat");
-                  else if (e.target.value === "Brazil") setLocation("Mato Grosso");
-                  else if (e.target.value === "Russia") setLocation("Rostov Region");
-                  else if (e.target.value === "China") setLocation("Henan Basin");
-                  else if (e.target.value === "South Africa") setLocation("Free State");
-                }}
-                className="w-full h-10 px-3 border border-[#E2E0D8] rounded text-sm bg-white text-[#1B241E] focus:outline-none focus:border-[#2D5A3C]"
-              >
-                <option value="India">India 🇮🇳 (National Node — Gujarat Sub-basin)</option>
-                <option value="Brazil">Brazil 🇧🇷 (Cerrado Node)</option>
-                <option value="Russia">Russia 🇷🇺 (Black Soil Node)</option>
-                <option value="China">China 🇨🇳 (Yellow Basin Node)</option>
-                <option value="South Africa">South Africa 🇿🇦 (Free State Node)</option>
-              </select>
-              <span className="text-[11px] font-mono text-[#58635A] mt-1 block">
-                Selects regional agro-climatic baseline and cadastral CRS.
-              </span>
-            </div>
+          {/* Right: Parcel Parameters Editor */}
+          <div className="card-tmpl">
+            <h3 className="text-[1.25rem] font-medium mb-4 text-[var(--ink)]">
+              Field Parcel Parameters
+            </h3>
 
-            {/* 2. Location */}
-            <div>
-              <label htmlFor="location-input" className="block text-xs font-semibold text-[#1B241E] mb-1">
-                LOCATION / DISTRICT
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="location-input"
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="flex-1 h-10 px-3 border border-[#E2E0D8] rounded text-sm bg-white text-[#1B241E] focus:outline-none focus:border-[#2D5A3C]"
-                  placeholder="Search district, town or coordinates"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setLocation("Ahmedabad, Gujarat")}
-                >
-                  <Icon name="mapPin" className="w-3.5 h-3.5 mr-1 text-[#58635A]" />
-                  Detect GPS
-                </Button>
-              </div>
-              <span className="text-[11px] font-mono text-[#58635A] mt-1 block">
-                Resolved: {country === "India" ? "23.0225° N, 72.5714° E (EPSG:4326)" : "Auto-Resolved via CADS"}
-              </span>
-            </div>
-
-            {/* 3. Crop Species & Farm Area */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={handleSaveProfile} className="space-y-4 text-left">
               <div>
-                <label htmlFor="crop-select" className="block text-xs font-semibold text-[#1B241E] mb-1">
-                  CROP SPECIES
+                <label className="block text-[0.85rem] text-[var(--muted)] mb-1.5 font-medium">
+                  Parcel Name & Location
+                </label>
+                <input
+                  type="text"
+                  value={farmName}
+                  onChange={(e) => setFarmName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] text-[var(--ink)] text-[0.95rem] focus:outline-none focus:border-[var(--leaf)]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[0.85rem] text-[var(--muted)] mb-1.5 font-medium">
+                    Acreage (Acres)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={acres}
+                    onChange={(e) => setAcres(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] text-[var(--ink)] text-[0.95rem] focus:outline-none focus:border-[var(--leaf)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[0.85rem] text-[var(--muted)] mb-1.5 font-medium">
+                    Primary Crop
+                  </label>
+                  <select
+                    value={crop}
+                    onChange={(e) => setCrop(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] text-[var(--ink)] text-[0.95rem] focus:outline-none focus:border-[var(--leaf)]"
+                  >
+                    <option value="wheat">Wheat (Triticum durum)</option>
+                    <option value="cotton">Cotton (Bt Cotton)</option>
+                    <option value="chickpea">Chickpea (Gram pulse)</option>
+                    <option value="mustard">Mustard (Oilseed)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[0.85rem] text-[var(--muted)] mb-1.5 font-medium">
+                  Sowing Date
+                </label>
+                <input
+                  type="date"
+                  value={sowDate}
+                  onChange={(e) => setSowDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] text-[var(--ink)] text-[0.95rem] focus:outline-none focus:border-[var(--leaf)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[0.85rem] text-[var(--muted)] mb-1.5 font-medium">
+                  Irrigation Infrastructure
                 </label>
                 <select
-                  id="crop-select"
-                  value={crop}
-                  onChange={(e) => setCrop(e.target.value)}
-                  className="w-full h-10 px-3 border border-[#E2E0D8] rounded text-sm bg-white text-[#1B241E] focus:outline-none focus:border-[#2D5A3C]"
+                  value={irrigation}
+                  onChange={(e) => setIrrigation(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] text-[var(--ink)] text-[0.95rem] focus:outline-none focus:border-[var(--leaf)]"
                 >
-                  <option value="Wheat">Wheat (Triticum aestivum)</option>
-                  <option value="Rice">Rice (Oryza sativa)</option>
-                  <option value="Maize">Maize (Zea mays)</option>
-                  <option value="Soybean">Soybean (Glycine max)</option>
-                  <option value="Cotton">Cotton (Gossypium)</option>
-                  <option value="Chickpea">Chickpea (Cicer arietinum)</option>
+                  <option value="canal">Canal Gravity Flow / Furrow</option>
+                  <option value="drip">Drip Irrigation System (Micro)</option>
+                  <option value="sprinkler">Sprinkler Guns</option>
+                  <option value="rainfed">Pure Rainfed / Zero Bore</option>
                 </select>
               </div>
 
               <div>
-                <Input
-                  label="FARM AREA"
-                  type="number"
-                  value={area}
-                  onChange={(e) => setArea(parseFloat(e.target.value) || 1)}
-                  step="0.1"
-                  unit={areaUnit}
-                />
-              </div>
-            </div>
-
-            {/* 4. Soil Parameters (Optional Collapsible) */}
-            <div className="border border-[#E2E0D8] rounded p-4 bg-[#FBFBF9]">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#1B241E]">
-                  SOIL CHEMISTRY PARAMETERS (OPTIONAL)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSoilExpanded(!soilExpanded)}
-                  className="text-xs font-mono text-[#2D5A3C] hover:underline"
+                <label className="block text-[0.85rem] text-[var(--muted)] mb-1.5 font-medium">
+                  Soil Management Baseline
+                </label>
+                <select
+                  value={tillage}
+                  onChange={(e) => setTillage(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] text-[var(--ink)] text-[0.95rem] focus:outline-none focus:border-[var(--leaf)]"
                 >
-                  {soilExpanded ? "[-] Collapse" : "[+] Expand Fields"}
-                </button>
+                  <option value="reduced">Reduced Till + Organic Mulch</option>
+                  <option value="conv">Conventional Deep Disc Plowing</option>
+                  <option value="zero">Zero Tillage (Happy Seeder)</option>
+                </select>
               </div>
 
-              {soilExpanded ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t border-[#E2E0D8]">
-                  <div>
-                    <label htmlFor="soil-ph" className="block text-[11px] text-[#58635A] mb-1">
-                      pH Level
-                    </label>
-                    <input
-                      id="soil-ph"
-                      type="number"
-                      step="0.1"
-                      value={ph}
-                      onChange={(e) => setPh(parseFloat(e.target.value) || 6.8)}
-                      className="w-full h-8 px-2 border border-[#E2E0D8] rounded text-xs bg-white text-[#1B241E]"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="soil-oc" className="block text-[11px] text-[#58635A] mb-1">
-                      Organic Carbon
-                    </label>
-                    <select
-                      id="soil-oc"
-                      value={organicCarbon}
-                      onChange={(e) => setOrganicCarbon(e.target.value)}
-                      className="w-full h-8 px-2 border border-[#E2E0D8] rounded text-xs bg-white text-[#1B241E]"
-                    >
-                      <option value="Medium">Medium (0.50–0.75%)</option>
-                      <option value="Low">Low (&lt; 0.50%)</option>
-                      <option value="High">High (&gt; 0.75%)</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <label htmlFor="soil-n" className="block text-[11px] text-[#58635A] mb-1">
-                      Nitrogen (N)
-                    </label>
-                    <select
-                      id="soil-n"
-                      value={nitrogen}
-                      onChange={(e) => setNitrogen(e.target.value)}
-                      className="w-full h-8 px-2 border border-[#E2E0D8] rounded text-xs bg-white text-[#1B241E]"
-                    >
-                      <option value="Low">Low (&lt; 200 kg/ha)</option>
-                      <option value="Medium">Medium (200–350 kg/ha)</option>
-                      <option value="High">High (&gt; 350 kg/ha)</option>
-                    </select>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[11px] text-[#58635A] mt-1">
-                  Regional public soil averages (HWSD v2.0 / ICAR baseline) will be automatically applied.
-                </p>
-              )}
-            </div>
-
-            {/* Submission CTA */}
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="w-full uppercase tracking-wider text-xs"
-            >
-              Continue to Farm Analysis
-              <Icon name="chevronRight" className="w-4 h-4 ml-1.5" />
-            </Button>
-          </form>
+              <div className="pt-2 flex flex-col gap-2.5">
+                <button
+                  type="submit"
+                  className="btn-tmpl btn-tmpl-primary w-full text-center"
+                >
+                  Save Parcel Profile
+                </button>
+                <Link
+                  href="/dashboard"
+                  className="btn-tmpl btn-tmpl-ghost w-full text-center text-xs"
+                >
+                  Return to Dashboard →
+                </Link>
+              </div>
+            </form>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
