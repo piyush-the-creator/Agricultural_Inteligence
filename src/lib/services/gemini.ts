@@ -83,32 +83,37 @@ RULES:
 }
 `;
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-pro",
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-      },
-    });
+  const candidateModels = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash"];
+  const genAI = new GoogleGenerativeAI(apiKey);
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const parsed = JSON.parse(text);
+  for (const modelName of candidateModels) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        },
+      });
 
-    // Validate structured output via Zod
-    const validated = AdvisoryOutputSchema.parse(parsed);
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      const parsed = JSON.parse(text);
 
-    return {
-      ...validated,
-      provenance: "Gemini 1.5 Pro Agronomy Chain",
-      timestamp: new Date().toISOString(),
-    };
-  } catch (error: any) {
-    console.warn("[Gemini Advisory] AI generation error or parse failure. Cascading to deterministic fallback:", error);
-    return DEMO_ADVISORY;
+      // Validate structured output via Zod
+      const validated = AdvisoryOutputSchema.parse(parsed);
+
+      return {
+        ...validated,
+        provenance: `${modelName} Agronomy Chain`,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      console.warn(`[Gemini Advisory ${modelName}] Attempt failed:`, error?.message || error);
+    }
   }
+
+  return DEMO_ADVISORY;
 }
 
 /**
@@ -153,17 +158,22 @@ INSTRUCTIONS:
 4. Do not act as a generic conversational chatbot.
 `;
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: { temperature: 0.2 },
-    });
+  const candidateModels = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash"];
+  const genAI = new GoogleGenerativeAI(apiKey);
 
-    const result = await model.generateContent(prompt);
-    return result.response.text().trim();
-  } catch (error) {
-    console.warn("[Gemini Assistant] Query failure, using contextual fallback:", error);
-    return `Based on current telemetry for ${farmData.farm.location}, your ${farmData.farm.crop} has an NDVI of ${farmData.satellite.currentNdvi} with ${farmData.weather.rainfallNext48h || 18}mm of rain forecasted. We recommend holding irrigation and monitoring nitrogen levels.`;
+  for (const modelName of candidateModels) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { temperature: 0.2 },
+      });
+
+      const result = await model.generateContent(prompt);
+      return result.response.text().trim();
+    } catch (error: any) {
+      console.warn(`[Gemini Assistant ${modelName}] Attempt failed:`, error?.message || error);
+    }
   }
+
+  return `Based on current telemetry for ${farmData.farm.location}, your ${farmData.farm.crop} has an NDVI of ${farmData.satellite.currentNdvi} with ${farmData.weather.rainfallNext48h || 18}mm of rain forecasted. We recommend holding irrigation and monitoring nitrogen levels.`;
 }

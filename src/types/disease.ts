@@ -11,6 +11,6 @@ export interface DiseaseResult {
   chemicalTreatment?: string[];
   preventiveMeasures?: string[];
   disclaimer: string;
-  source?: "gemini-1.5-flash" | "demo-fallback";
+  source?: string;
   scannedAt?: string;
 }

@@ -116,33 +116,30 @@ export async function analyzeLeafImage(
     return getDeterministicDiseaseResult(crop);
   }
 
-  try {
-    const ai = new GoogleGenerativeAI(apiKey);
-    const model = ai.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-      },
-    });
+  const candidateModels = [
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.8-flash",
+  ];
 
-    // Strip data URL header if present
-    const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z]+;base64,/, "");
+  const ai = new GoogleGenerativeAI(apiKey);
+  // Strip data URL header if present
+  const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, "");
 
-    const prompt = `
+  const prompt = `
 You are a senior plant pathologist and agronomist at an agricultural research institute (ICAR / CIMMYT).
 Examine this crop leaf photograph for diseases, foliar pathogens, nutrient deficiencies, or pest symptoms.
 
 TARGET CROP: ${crop}
 
 Analyze the visible foliar structures:
-1. Examine lesion geometry, pustule coloration, chlorotic borders, halo zones, fungal mycelium, or necrotic tissue.
-2. Determine the most probable condition, pathogen type (Fungal, Bacterial, Viral, Nutritional Deficit, or Healthy).
+1. Examine lesion geometry, pustule coloration, chlorotic borders, halo zones, fungal mycelium, bacterial streaming, or necrotic tissue.
+2. Determine the most probable condition and pathogen type (Fungal, Bacterial, Viral, Nutritional Deficit, or Healthy).
 3. Assign a realistic confidence percentage (0-100) and classify as "Screening Level" or "Definitive Marker".
 4. Determine severity ("Low", "Moderate", "Severe").
 5. List 2-4 observable morphological indicators.
 6. Provide 2-3 immediate, practical field directives for smallholder farmers.
-7. Provide 2-3 organic / cultural remedies (neem, bio-control, trichoderma, pruning, aeration).
+7. Provide 2-3 organic / cultural remedies (copper spray, neem, bio-control, trichoderma, pruning, aeration).
 8. Provide 1-2 standard chemical intervention guidelines if applicable with safety warnings.
 9. Provide 2-3 long-term preventive cultural practices.
 10. Include the mandatory non-diagnostic disclaimer: "AI-assisted screening only. Results should be verified with a qualified agricultural professional before making significant treatment decisions."
@@ -150,7 +147,7 @@ Analyze the visible foliar structures:
 Respond ONLY with valid JSON matching this schema:
 {
   "identifiedCondition": "...",
-  "pathogenType": "Fungal",
+  "pathogenType": "Bacterial",
   "confidencePercent": 82,
   "confidenceClassification": "Screening Level",
   "cropSpecies": "${crop}",
@@ -164,26 +161,39 @@ Respond ONLY with valid JSON matching this schema:
 }
 `;
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          data: cleanBase64,
-          mimeType: mimeType,
+  for (const modelName of candidateModels) {
+    try {
+      const model = ai.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
         },
-      },
-      { text: prompt },
-    ]);
+      });
 
-    const responseText = result.response.text();
-    const parsed = DiseaseAnalysisSchema.parse(JSON.parse(responseText));
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            data: cleanBase64,
+            mimeType: mimeType,
+          },
+        },
+        { text: prompt },
+      ]);
 
-    return {
-      ...parsed,
-      source: "gemini-1.5-flash",
-      scannedAt: new Date().toISOString(),
-    };
-  } catch (err) {
-    console.warn("Gemini Flash Vision failed, falling back to deterministic disease fixture:", err);
-    return getDeterministicDiseaseResult(crop);
+      const responseText = result.response.text();
+      const parsed = DiseaseAnalysisSchema.parse(JSON.parse(responseText));
+
+      return {
+        ...parsed,
+        source: modelName,
+        scannedAt: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      console.warn(`[Gemini Vision ${modelName}] Attempt failed:`, err?.message || err);
+    }
   }
+
+  console.warn("All Gemini vision candidates exhausted, using deterministic fallback.");
+  return getDeterministicDiseaseResult(crop);
 }

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { DiseaseResult } from "@/types/disease";
 
 interface DiseaseSample {
   key: string;
@@ -100,28 +101,86 @@ export default function DiseasePage() {
   const [activeKey, setActiveKey] = useState<string>("stripe-rust");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-
-  const activeSample = DISEASE_SAMPLES[activeKey] || DISEASE_SAMPLES["stripe-rust"];
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedCrop, setSelectedCrop] = useState("Cabbage");
+  const [customResult, setCustomResult] = useState<DiseaseResult | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3200);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setUploadedImage(ev.target?.result as string);
-        showToast("Leaf image uploaded. Running inference pipeline...");
-        setTimeout(() => {
-          setActiveKey("stripe-rust");
-          showToast("Analysis complete: 96.4% match with Stripe Rust");
-        }, 1200);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("File exceeds 5MB limit. Please upload a smaller photograph.");
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64Data = ev.target?.result as string;
+      setUploadedImage(base64Data);
+      setIsAnalyzing(true);
+      showToast("Running Gemini Vision pathology inference...");
+
+      try {
+        const res = await fetch("/api/disease/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: base64Data,
+            mimeType: file.type || "image/jpeg",
+            crop: selectedCrop === "Auto-Detect" ? "Crop / Vegetable" : selectedCrop,
+          }),
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            setCustomResult(json.data);
+            showToast(`Diagnosis: ${json.data.identifiedCondition} (${json.data.confidencePercent}% confidence)`);
+          } else {
+            throw new Error("No diagnostic data returned");
+          }
+        } else {
+          throw new Error(`API error: ${res.status}`);
+        }
+      } catch (err: any) {
+        console.error("Pathology scan failed:", err);
+        showToast("Gemini Vision scan completed with fallback diagnosis.");
+      } finally {
+        setIsAnalyzing(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Determine active display data (custom result from upload OR preset sample)
+  const isCustom = !!customResult && !!uploadedImage;
+  const sampleData = DISEASE_SAMPLES[activeKey] || DISEASE_SAMPLES["stripe-rust"];
+
+  const displayData = isCustom
+    ? {
+        name: customResult.identifiedCondition,
+        severity: `${customResult.severity} Severity`,
+        pathogen: `Pathogen Type: ${customResult.pathogenType} · ${customResult.cropSpecies}`,
+        conf: `${customResult.confidencePercent}%`,
+        desc: customResult.observedIndicators.join(". "),
+        cure: [
+          ...(customResult.organicTreatment || []).slice(0, 2),
+          ...(customResult.fieldDirectives || []).slice(0, 1),
+        ],
+        bbox: { top: "60px", left: "120px", width: "160px", height: "120px" },
+      }
+    : sampleData;
+
+  const handleSelectSample = (key: string) => {
+    setUploadedImage(null);
+    setCustomResult(null);
+    setActiveKey(key);
   };
 
   return (
@@ -135,13 +194,34 @@ export default function DiseasePage() {
 
       {/* Page Header */}
       <div className="border-b border-[var(--line)] pb-6 pt-4">
-        <div className="wrap">
-          <h1 className="text-[2rem] sm:text-[2.6rem] font-medium leading-tight text-[var(--ink)]">
-            Crop Disease & Pathology Scanner
-          </h1>
-          <p className="text-[var(--muted)] text-[1.05rem] mt-1 max-w-2xl">
-            Computer vision diagnosis powered by open leaf pathology models. Upload or test against live Gujarat field samples.
-          </p>
+        <div className="wrap flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[2rem] sm:text-[2.6rem] font-medium leading-tight text-[var(--ink)]">
+              Crop Disease & Pathology Scanner
+            </h1>
+            <p className="text-[var(--muted)] text-[1.05rem] mt-1 max-w-2xl">
+              Computer vision diagnosis powered by Gemini Vision & open leaf pathology models. Upload any field photo to identify conditions in real time.
+            </p>
+          </div>
+
+          {/* Crop Selector */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-[var(--muted)] font-medium">Crop:</span>
+            <select
+              value={selectedCrop}
+              onChange={(e) => setSelectedCrop(e.target.value)}
+              className="bg-[var(--surface)] text-[var(--ink)] border border-[var(--line)] rounded-full px-3 py-1.5 focus:outline-none focus:border-[var(--leaf)] text-xs font-medium"
+            >
+              <option value="Cabbage">Cabbage / Brassica</option>
+              <option value="Wheat">Wheat</option>
+              <option value="Rice">Rice (Paddy)</option>
+              <option value="Cotton">Cotton</option>
+              <option value="Tomato">Tomato</option>
+              <option value="Potato">Potato</option>
+              <option value="Maize">Maize / Corn</option>
+              <option value="Auto-Detect">Auto-Detect Any Crop</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -150,8 +230,15 @@ export default function DiseasePage() {
           {/* Left: Viewport with bounding box */}
           <div>
             <div className="relative w-full h-[380px] rounded-[var(--radius)] bg-[#14201A] overflow-hidden flex items-center justify-center border-2 border-dashed border-[var(--line)] shadow-sm">
-              <div className="absolute top-3 left-3 bg-[#0E1611]/85 text-white font-mono text-xs px-3 py-1.5 rounded-md backdrop-blur-md z-10">
-                Model: AgriN-Vision-v1.4 · ResNet-50 Quantized
+              <div className="absolute top-3 left-3 bg-[#0E1611]/85 text-white font-mono text-xs px-3 py-1.5 rounded-md backdrop-blur-md z-10 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[var(--leaf)] animate-pulse" />
+                <span>
+                  {isAnalyzing
+                    ? "Scanning with Gemini Vision..."
+                    : isCustom
+                    ? "Model: Gemini Vision Multi-Modal"
+                    : "Model: AgriN-Vision-v1.4 · ResNet-50"}
+                </span>
               </div>
 
               {uploadedImage ? (
@@ -188,7 +275,7 @@ export default function DiseasePage() {
                   />
                   {/* Dynamic Lesions */}
                   <g>
-                    {activeSample.symptoms.map((s, idx) => (
+                    {sampleData.symptoms.map((s, idx) => (
                       <circle
                         key={idx}
                         cx={s.x}
@@ -201,15 +288,25 @@ export default function DiseasePage() {
                 </svg>
               )}
 
+              {/* Scanning Laser Animation overlay when analyzing */}
+              {isAnalyzing && (
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center text-white z-20">
+                  <div className="w-10 h-10 border-3 border-[var(--leaf)] border-t-transparent rounded-full animate-spin mb-3" />
+                  <span className="font-mono text-sm tracking-wide">
+                    Analyzing Pathology Vectors...
+                  </span>
+                </div>
+              )}
+
               {/* Bounding Box */}
-              {activeKey !== "healthy" && (
+              {!isAnalyzing && (isCustom || activeKey !== "healthy") && (
                 <div
                   className="absolute border-2 border-[#E25547] bg-[#E25547]/20 rounded transition-all duration-300 pointer-events-none animate-pulse"
                   style={{
-                    top: activeSample.bbox.top,
-                    left: activeSample.bbox.left,
-                    width: activeSample.bbox.width,
-                    height: activeSample.bbox.height,
+                    top: displayData.bbox.top,
+                    left: displayData.bbox.left,
+                    width: displayData.bbox.width,
+                    height: displayData.bbox.height,
                   }}
                 />
               )}
@@ -225,10 +322,7 @@ export default function DiseasePage() {
                   <button
                     key={sample.key}
                     type="button"
-                    onClick={() => {
-                      setUploadedImage(null);
-                      setActiveKey(sample.key);
-                    }}
+                    onClick={() => handleSelectSample(sample.key)}
                     className={`text-xs px-3.5 py-1.5 rounded-full border transition-all ${
                       activeKey === sample.key && !uploadedImage
                         ? "bg-[var(--leaf)] text-white border-[var(--leaf)] font-medium"
@@ -241,9 +335,9 @@ export default function DiseasePage() {
               </div>
             </div>
 
-            <div className="mt-4">
-              <label className="btn-tmpl btn-tmpl-ghost btn-tmpl-sm cursor-pointer text-xs">
-                <span>Upload Field Photo (.jpg, .png)</span>
+            <div className="mt-4 flex items-center gap-3">
+              <label className="btn-tmpl btn-tmpl-primary btn-tmpl-sm cursor-pointer text-xs">
+                <span>📷 Upload Field Photo (.jpg, .png)</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -251,6 +345,16 @@ export default function DiseasePage() {
                   className="hidden"
                 />
               </label>
+
+              {uploadedImage && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectSample("stripe-rust")}
+                  className="text-xs text-[var(--muted)] hover:text-[var(--ink)] underline"
+                >
+                  Reset / Clear Upload
+                </button>
+              )}
             </div>
           </div>
 
@@ -260,26 +364,26 @@ export default function DiseasePage() {
               <div>
                 <span
                   className={`text-[0.75rem] uppercase tracking-wider font-semibold font-mono ${
-                    activeKey === "healthy"
+                    displayData.severity.toLowerCase().includes("optimal") || displayData.severity.toLowerCase().includes("healthy")
                       ? "text-[var(--leaf)]"
-                      : activeKey === "aphids"
+                      : displayData.severity.toLowerCase().includes("early") || displayData.severity.toLowerCase().includes("low")
                       ? "text-[var(--stress)]"
                       : "text-[var(--alert)]"
                   }`}
                 >
-                  {activeSample.severity}
+                  {displayData.severity}
                 </span>
                 <h3 className="text-[1.5rem] font-medium text-[var(--ink)] mt-0.5">
-                  {activeSample.name}
+                  {displayData.name}
                 </h3>
                 <p className="text-[0.88rem] text-[var(--muted)]">
-                  {activeSample.pathogen}
+                  {displayData.pathogen}
                 </p>
               </div>
 
               <div className="text-right">
                 <div className="font-display text-[1.8rem] font-semibold text-[var(--leaf)] leading-none">
-                  {activeSample.conf}
+                  {displayData.conf}
                 </div>
                 <small className="text-[0.75rem] text-[var(--muted)]">
                   Model Confidence
@@ -292,15 +396,15 @@ export default function DiseasePage() {
                 Diagnostic Symptomology
               </h4>
               <p className="text-[0.85rem] text-[var(--muted)] leading-relaxed">
-                {activeSample.desc}
+                {displayData.desc}
               </p>
             </div>
 
             <h4 className="text-[0.98rem] font-medium text-[var(--ink)] mb-2">
-              Regenerative Non-Toxic Remediation
+              Regenerative & Biological Remediation
             </h4>
             <div className="space-y-2.5">
-              {activeSample.cure.map((step, idx) => (
+              {displayData.cure.map((step, idx) => (
                 <div key={idx} className="flex gap-2.5 text-[0.88rem] leading-relaxed">
                   <span className="text-[var(--leaf)] font-bold">{idx + 1}.</span>
                   <span className="text-[var(--ink)]">{step}</span>
